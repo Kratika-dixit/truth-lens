@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TruthLens.sys</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #000000;
+      --text: #e0e0e0;
+      --text-muted: #555555;
+      --border: #222222;
+      --fake: #ff1e1e;
+      --real: #ffffff;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* CSS Noise Texture */
+    .noise {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.05;
+      background-image: url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)"/%3E%3C/svg%3E');
+    }
+
+    .brand {
+      position: absolute;
+      top: 1.5rem;
+      left: 1.5rem;
+      font-size: 0.8rem;
+      color: #444;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      z-index: 10;
+    }
+
+    /* Views */
+    #inputView, #resultView {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+      transition: opacity 0.3s ease;
+    }
+
+    #resultView {
+      display: none;
+    }
+
+    /* Input Area */
+    .input-container {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: #ffffff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      padding: 1.5rem;
+      resize: none;
+      outline: none;
+      transition: border-color 0.4s ease, box-shadow 0.4s ease;
+      line-height: 1.5;
+    }
+
+    textarea:focus {
+      border-color: #444;
+      box-shadow: 0 0 30px rgba(255, 255, 255, 0.03);
+    }
+
+    textarea::placeholder {
+      color: #333;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .btn {
+      margin-top: 2.5rem;
+      background: #111;
+      color: #fff;
+      border: 1px solid #333;
+      padding: 0.8rem 2.5rem;
+      border-radius: 50px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      outline: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: #1a1a1a;
+      border-color: #555;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.08);
+    }
+
+    .btn:disabled {
+      color: #555;
+      cursor: not-allowed;
+    }
+
+    .error-msg {
+      margin-top: 1.5rem;
+      color: var(--fake);
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .error-msg.visible {
+      opacity: 1;
+    }
+
+    /* Result Area */
+    .result-content {
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      animation: reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes reveal {
+      from { opacity: 0; transform: translateY(20px); filter: blur(10px); }
+      to { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+
+    .explanation {
+      font-family: serif;
+      font-style: italic;
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      line-height: 1.8;
+      max-width: 500px;
+      margin: 0 auto 1.25rem;
+    }
+
+    /* Results cards */
+    .results-container {
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin: 1rem 0 2rem;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid #1a1a1a;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .card .claim {
+      color: #ddd;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .card .meta {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      font-size: 0.85rem;
+      color: #9a9a9a;
+    }
+
+    .rating {
+      font-weight: 700;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.7rem;
+      color: #111;
+    }
+
+    .rating.false { background: #ff5c5c; }
+    .rating.true { background: #4cd37b; }
+    .rating.misleading { background: #ff9b3a; }
+    .rating.altered { background: #ffd84d; color: #111; }
+
+    .source-link {
+      color: #9a9a9a;
+      text-decoration: none;
+      border-bottom: 1px dotted rgba(154,154,154,0.2);
+    }
+
+    .no-results {
+      color: #cfcfcf;
+      font-size: 0.95rem;
+      max-width: 700px;
+      text-align: center;
+      margin: 1rem 0 2rem;
+    }
+
+    .fact-checks {
+      width: 100%;
+      max-width: 500px;
+      text-align: left;
+      border-top: 1px dotted #333;
+      padding-top: 2rem;
+      margin-top: 1rem;
+    }
+
+    .fact-check-item {
+      margin-bottom: 1.5rem;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    .fact-check-item .fc-claim {
+      color: #aaa;
+      margin-bottom: 0.3rem;
+    }
+
+    .fact-check-item .fc-meta {
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .fc-meta span {
+      color: #888;
+    }
+
+    .fc-meta a {
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px dotted #444;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .fc-meta a:hover {
+      color: #fff;
+      border-color: #fff;
+    }
+
+    .btn-reset {
+      margin-top: 4rem;
+      background: transparent;
+      border: 1px solid #222;
+      color: #666;
+    }
+    
+    .btn-reset:hover {
+      background: rgba(255,255,255,0.02);
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="noise"></div>
+  <div class="brand">TruthLens</div>
+
+  <!-- Input View -->
+  <div id="inputView">
+    <div class="input-container">
+      <textarea id="inputText" placeholder="Enter target data for analysis..."></textarea>
+      <button class="btn" id="analyzeBtn" onclick="analyze()">
+        <span id="btnLabel">Analyze</span>
+      </button>
+      <div class="error-msg" id="error"></div>
+    </div>
+  </div>
+
+  <!-- Result View -->
+  <div id="resultView">
+    <div class="result-content">
+      <div class="explanation" id="explanation"></div>
+
+      <div class="results-container" id="results" style="display:none"></div>
+      <div class="no-results" id="noResults" style="display:none"></div>
+
+      <button class="btn btn-reset" onclick="resetView()">Reset Query</button>
+    </div>
+  </div>
+
+  <script>
+    async function analyze() {
+      const text = document.getElementById('inputText').value.trim();
+      const btn = document.getElementById('analyzeBtn');
+      const errorEl = document.getElementById('error');
+
+      errorEl.classList.remove('visible');
+
+      if (!text) {
+        errorEl.textContent = 'Error: No payload provided.';
+        errorEl.classList.add('visible');
+        return;
+      }
+
+      btn.disabled = true;
+      document.getElementById('btnLabel').textContent = 'Processing...';
+
+      try {
+        const res = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `Server exception: ${res.status}`);
+        }
+
+        const data = await res.json();
+        renderResult(data);
+      } catch (e) {
+        errorEl.textContent = e.message || 'System failure.';
+        errorEl.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        document.getElementById('btnLabel').textContent = 'Analyze';
+      }
+    }
+
+    function renderResult(data) {
+      console.log('API response:', data);
+      document.getElementById('inputView').style.display = 'none';
+
+      const resultsEl = document.getElementById('results');
+      const noResultsEl = document.getElementById('noResults');
+      const explanationEl = document.getElementById('explanation');
+
+      // clear previous
+      resultsEl.innerHTML = '';
+      noResultsEl.textContent = '';
+      explanationEl.textContent = '';
+
+      const hasResults = Array.isArray(data.results) && data.results.length > 0;
+      const foundFlag = Boolean(data.found);
+
+      // Show message as explanation
+      explanationEl.textContent = data.message || 'Analysis complete.';
+
+      if (foundFlag && hasResults) {
+        // show each result as a card
+        data.results.forEach(r => {
+          const card = document.createElement('div');
+          card.className = 'card';
+
+          const claim = document.createElement('div');
+          claim.className = 'claim';
+          claim.textContent = r.claim || '';
+
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+
+          const rating = document.createElement('span');
+          rating.className = 'rating ' + ratingClass(r.rating || '');
+          rating.textContent = r.rating || '';
+
+          const source = document.createElement('span');
+          if (r.url) {
+            const a = document.createElement('a');
+            a.href = r.url;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.className = 'source-link';
+            a.textContent = r.source || r.url;
+            source.appendChild(a);
+          } else {
+            source.textContent = r.source || '';
+          }
+
+          meta.appendChild(rating);
+          meta.appendChild(source);
+
+          card.appendChild(claim);
+          card.appendChild(meta);
+
+          resultsEl.appendChild(card);
+        });
+
+        resultsEl.style.display = 'flex';
+        noResultsEl.style.display = 'none';
+      } else {
+        // not found -> show message
+        noResultsEl.textContent = '';
+        noResultsEl.style.display = 'none';
+        resultsEl.style.display = 'none';
+      }
+
+      // Show Result
+      document.getElementById('resultView').style.display = 'flex';
+    }
+
+    function ratingClass(r) {
+      const s = String(r || '').toLowerCase();
+      if (s.includes('false')) return 'false';
+      if (s.includes('true')) return 'true';
+      if (s.includes('misleading')) return 'misleading';
+      if (s.includes('altered')) return 'altered';
+      return '';
+    }
+
+    function resetView() {
+      document.getElementById('inputText').value = '';
+      document.getElementById('resultView').style.display = 'none';
+      document.getElementById('inputView').style.display = 'flex';
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s || '';
+      return d.innerHTML;
+    }
+
+    // allow Ctrl+Enter to submit
+    document.getElementById('inputText').addEventListener('keydown', e => {
+      if (e.ctrlKey && e.key === 'Enter') analyze();
+    });
+  </script>
+
+</body>
+</html>
